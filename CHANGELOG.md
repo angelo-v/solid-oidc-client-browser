@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 If you have any questions, see the issues and discussions (e.g. [#18](https://github.com/uvdsl/solid-oidc-client-browser/issues/18))
 
+## [0.2.3] - 2026-06-18
+
+### 🐛 Fixed
+
+- **Context loss in `authFetch`**: Permanently bound the `authFetch` method to the session instance in the constructor. This allows developers to pass `session.authFetch` directly as a custom fetch callback to third-party libraries (such as `rdf-dereference.js`) without losing the `this` context and triggering `undefined` errors. (Fixes [#26](https://github.com/uvdsl/solid-oidc-client-browser/issues/26))
 
 ## [0.2.2] - 2025-12-16
 
@@ -51,7 +56,7 @@ If you have any questions, see the issues and discussions (e.g. [#18](https://gi
 
 ### 🐛 Fixed
 
-- **Reliable Token Refresh**: The new SharedWorker architecture ensures that tokens are reliably refreshed even when tabs are inactive or hibernating, resolving issues where sessions would become stale. (Fixes [#13](https://github.com/uvdsl/solid-oidc-client-browser/issues/13)).
+- **Reliable Token Refresh**: The new SharedWorker architecture ensures that tokens are reliably refreshed even when tabs are inactive or hibernating, resolving issues where sessions would become stale. (Fixes [#13](https://github.com/uvdsl/solid-oidc-client-browser/issues/13))
 
 ### ✨ Features (Added)
 
