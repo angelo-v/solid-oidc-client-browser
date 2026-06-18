@@ -2,11 +2,11 @@
 
 # Solid OIDC Client Browser
 
-This library implements a very simple version of the Solid OIDC protocol:
+This library implements the Solid-OIDC protocol as supported by current Solid Servers:
 
 - [x] **Authorization Code Grant** 
     - [x] with PKCE (RFC 7636)
-    - [x] with `iss` parameter check for enhanced security (RFC 9207)
+    - [x] with strict `iss` parameter check for enhanced security (RFC 9207)
 - [x] **RefreshTokenGrant** 
     - [x] to renew tokens in-session
     - [x] to restore an idle session
