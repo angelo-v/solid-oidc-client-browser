@@ -3,6 +3,7 @@ import { SessionOptions, SessionCore } from '../core/Session';
 import { getWorkerUrl } from './RefreshWorkerUrl';
 import { RefreshMessageTypes } from './RefreshMessageTypes';
 import { SessionIDB } from './SessionDatabase';
+import {SecureSharedWorker} from "./SecureSharedWorker";
 
 // Any provided database via SessionOptions will be ignored.
 // Database will be an IndexedDB.
@@ -25,8 +26,13 @@ export class WebWorkerSession extends SessionCore {
         super(clientDetails, options);
 
         // Allow consumer to provide worker URL, or use default
-        const workerUrl = sessionOptions?.workerUrl ?? getWorkerUrl()
-        this.worker = new SharedWorker(workerUrl, { type: 'module' });
+
+        if (sessionOptions?.workerUrl) {
+          this.worker = new SharedWorker(sessionOptions?.workerUrl, { type: 'module' });
+        } else {
+          // TODO replace with real hash of RefreshWorker
+          this.worker = new SecureSharedWorker(getWorkerUrl(), "TODO", { type: 'module' });
+        }
         this.worker.port.onmessage = (event) => {
             this.handleWorkerMessage(event.data).catch(console.error);
         };

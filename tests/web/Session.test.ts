@@ -3,6 +3,7 @@ import { SessionCore, SessionEvents } from '../../src/core/Session';
 import { RefreshMessageTypes } from '../../src/web/RefreshMessageTypes';
 import { SessionIDB } from '../../src/web/SessionDatabase';
 import { TokenDetails } from '../../src/core/SessionInformation';
+import {SecureSharedWorker} from "../../src/web/SecureSharedWorker";
 
 // --- Mocks ---
 
@@ -12,6 +13,12 @@ jest.mock('../../src/web/RefreshWorkerUrl', () => ({
 }));
 
 jest.mock('../../src/web/SessionDatabase');
+
+jest.mock('../../src/web/SecureSharedWorker', () => ({
+  SecureSharedWorker: jest.fn().mockImplementation(() => ({
+    port: mockSharedWorkerPort,
+  }))
+}));
 
 const mockSharedWorkerPort = {
     postMessage: jest.fn(),
@@ -76,9 +83,10 @@ describe('WebWorkerSession', () => {
     });
 
     describe('Constructor', () => {
-        it('should create a SharedWorker with default URL', () => {
-            expect(SharedWorker).toHaveBeenCalledWith(
+        it('should create a SecureSharedWorker with default URL', () => {
+            expect(SecureSharedWorker).toHaveBeenCalledWith(
                 expect.any(URL),
+                expect.any(String),
                 { type: 'module' }
             );
         });
