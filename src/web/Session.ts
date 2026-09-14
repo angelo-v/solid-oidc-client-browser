@@ -15,7 +15,8 @@ export interface WebWorkerSessionOptions extends SessionOptions {
  * This Session provides background token refreshing using a Web Worker.
  */
 export class WebWorkerSession extends SessionCore {
-    private worker: SharedWorker;
+
+    private workerPromise: Promise<SharedWorker>;
 
     constructor(
         clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
@@ -24,21 +25,22 @@ export class WebWorkerSession extends SessionCore {
         const database = new SessionIDB();
         const options = { ...sessionOptions, database };
         super(clientDetails, options);
+        this.workerPromise = this.initWorker(sessionOptions);
+    }
 
+    private async initWorker(sessionOptions?: WebWorkerSessionOptions): Promise<SharedWorker> {
         // Allow consumer to provide worker URL, or use default
-
-        if (sessionOptions?.workerUrl) {
-          this.worker = new SharedWorker(sessionOptions?.workerUrl, { type: 'module' });
-        } else {
-          // TODO replace with real hash of RefreshWorker
-          this.worker = new SecureSharedWorker(getWorkerUrl(), "TODO", { type: 'module' });
-        }
-        this.worker.port.onmessage = (event) => {
+        const worker = sessionOptions?.workerUrl
+            ? new SharedWorker(sessionOptions.workerUrl, { type: 'module' })
+            // TODO replace with real hash of RefreshWorker
+            : await SecureSharedWorker.create(getWorkerUrl(), "TODO", { type: 'module' });
+        worker.port.onmessage = (event) => {
             this.handleWorkerMessage(event.data).catch(console.error);
         };
         window.addEventListener('beforeunload', () => {
-            this.worker.port.postMessage({ type: RefreshMessageTypes.DISCONNECT });
+            worker.port.postMessage({ type: RefreshMessageTypes.DISCONNECT });
         });
+        return worker;
     }
 
     private async handleWorkerMessage(data: any) {
@@ -83,7 +85,8 @@ export class WebWorkerSession extends SessionCore {
     async handleRedirectFromLogin() {
         await super.handleRedirectFromLogin();
         if (this.isActive) { // If login was successful, tell the worker to schedule refreshing
-            this.worker.port.postMessage({
+            const worker = await this.workerPromise;
+            worker.port.postMessage({
                 type: RefreshMessageTypes.SCHEDULE,
                 payload: { ...this.getTokenDetails(), expires_in: this.getExpiresIn() }
             });
@@ -91,6 +94,7 @@ export class WebWorkerSession extends SessionCore {
     }
 
     async restore() {
+        const worker = await this.workerPromise;
         if (this.refreshPromise) {
             return this.refreshPromise;
         }
@@ -98,12 +102,13 @@ export class WebWorkerSession extends SessionCore {
             this.resolveRefresh = resolve;
             this.rejectRefresh = reject;
         });
-        this.worker.port.postMessage({ type: RefreshMessageTypes.REFRESH });
+        worker.port.postMessage({ type: RefreshMessageTypes.REFRESH });
         return this.refreshPromise;
     }
 
     async logout() {
-        this.worker.port.postMessage({ type: RefreshMessageTypes.STOP });
+        const worker = await this.workerPromise;
+        worker.port.postMessage({ type: RefreshMessageTypes.STOP });
         await super.logout();
     }
 
