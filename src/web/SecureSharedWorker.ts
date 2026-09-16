@@ -4,14 +4,13 @@
  */
 export class SecureSharedWorker extends SharedWorker {
 
-    private constructor(scriptURL: string | URL, options: string | WorkerOptions) {
-        super(scriptURL, options);
-    }
+  private constructor(scriptURL: string | URL, options: string | WorkerOptions) {
+    super(scriptURL, options);
+  }
 
-    /**
-     * TODO fetch and verify the script before spawning.
-     */
-    static async create(scriptURL: string | URL, integrityHash: string, options: string | WorkerOptions): Promise<SecureSharedWorker> {
-        return new SecureSharedWorker(scriptURL, options);
-    }
+  static async create(scriptURL: string | URL, integrityHash: string, options: string | WorkerOptions): Promise<SecureSharedWorker> {
+    const response = await fetch(scriptURL, { integrity: integrityHash });
+    const blobUrl = URL.createObjectURL(new Blob([await response.text()], {type: 'text/javascript'}));
+    return new SecureSharedWorker(blobUrl, options);
+  }
 }
