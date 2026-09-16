@@ -114,10 +114,27 @@ describe('SecuredSharedWorker', () => {
     const freshBlobUrl = mintedBlobUrl();
     expect(freshBlobUrl).not.toBe(deadBlobUrl);
 
+    // and the fresh blob URL replaces the dead one in storage —
+    // so the next tab re-uses it instead of recovering again
+    expect(localStorage.getItem(`secure-shared-worker:https://cdn.example/worker.js`)).toBe(freshBlobUrl);
+
     // and create() hands back the newly connected worker
     expect(worker).not.toBe(deadWorker);
     expect(SharedWorker).toHaveBeenCalledWith(freshBlobUrl, { type: 'module' });
     expect(worker).toBe(latestFakeWorker());
+  });
+
+  it('rejects when the worker script cannot be fetched', async () => {
+    // given no stored blob URL and a CDN that does not serve the script
+    // (network failure or integrity mismatch both reject the fetch)
+    (fetch as jest.Mock).mockRejectedValue(new TypeError('Failed to fetch'));
+
+    // when a SecureSharedWorker is created
+    // then it rejects — no blob is minted and no worker is constructed
+    await expect(SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' }))
+      .rejects.toThrow('Failed to fetch');
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(SharedWorker).not.toHaveBeenCalled();
   });
 
   it('does not re-use the blob URL if a different worker script is used', async () => {
