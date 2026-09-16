@@ -27,13 +27,20 @@
 
   <pre id="log"></pre>
 
+  <!--
+    Important: A production setup must add the integrity has for the main bundle as well.
+    It is skipped in this dev setup for the convenience of development, since the hash changes with every new build.
+
+    For production use (or for local testing of the full trust chain) add a block like:
+
+    "integrity": {
+      "http://localhost:4000/esm/web/index.js": "sha384-<bundle-integrity-hash>"
+    }
+   -->
   <script type="importmap">
     {
       "imports": {
         "solid-oidc-client-browser": "http://localhost:4000/esm/web/index.js"
-      },
-      "integrity": {
-        "http://localhost:4000/esm/web/index.js": "sha384-iqT0qqOMNCaTe/Wo3s1aLZ94LhCpryh9uGcphBMD88qtmnT3jsKakqX/cxPjGXEv"
       }
     }
   </script>
