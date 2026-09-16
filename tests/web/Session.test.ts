@@ -87,7 +87,7 @@ describe('WebWorkerSession', () => {
         it('should create a SecureSharedWorker with default URL and integrity hash', async () => {
             expect(SecureSharedWorker.create).toHaveBeenCalledWith(
                 expect.any(URL),
-                expect.any(String),
+                expect.stringMatching(/^sha384-/),
                 { type: 'module' }
             );
         });

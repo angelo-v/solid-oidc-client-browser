@@ -1,6 +1,7 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { SessionOptions, SessionCore } from '../core/Session';
 import { getWorkerUrl } from './RefreshWorkerUrl';
+import { REFRESH_WORKER_INTEGRITY } from './RefreshWorkerIntegrity';
 import { RefreshMessageTypes } from './RefreshMessageTypes';
 import { SessionIDB } from './SessionDatabase';
 import {SecureSharedWorker} from "./SecureSharedWorker";
@@ -32,8 +33,7 @@ export class WebWorkerSession extends SessionCore {
         // Allow consumer to provide worker URL, or use default
         const worker = sessionOptions?.workerUrl
             ? new SharedWorker(sessionOptions.workerUrl, { type: 'module' })
-            // TODO replace with real hash of RefreshWorker
-            : await SecureSharedWorker.create(getWorkerUrl(), "TODO", { type: 'module' });
+            : await SecureSharedWorker.create(getWorkerUrl(), REFRESH_WORKER_INTEGRITY, { type: 'module' });
         worker.port.onmessage = (event) => {
             this.handleWorkerMessage(event.data).catch(console.error);
         };
