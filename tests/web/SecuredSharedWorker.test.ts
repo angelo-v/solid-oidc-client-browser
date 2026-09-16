@@ -1,6 +1,18 @@
-(global as any).SharedWorker = jest.fn();
+// SecureSharedWorker extends the global SharedWorker at module load,
+// so the mock must be installed before the imports below are evaluated.
+(global as any).SharedWorker = jest.fn().mockImplementation(() => {
+  const port: any = { start: jest.fn(), addEventListener: jest.fn() };
+  const worker: any = {
+    port,
+    addEventListener: jest.fn(),
+    signalAlive: () => port.addEventListener.mock.calls[0][1]({ data: { type: RefreshMessageTypes.WORKER_ALIVE } }),
+    signalError: () => worker.addEventListener.mock.calls[0][1]({ type: 'error' }),
+  };
+  return worker;
+});
 
 import {SecureSharedWorker} from "../../src/web/SecureSharedWorker";
+import {RefreshMessageTypes} from "../../src/web/RefreshMessageTypes";
 import {randomUUID} from 'crypto';
 
 const WORKER_SCRIPT = 'self.onmessage = () => {};';
@@ -22,6 +34,11 @@ describe('SecuredSharedWorker', () => {
 
   const mintedBlobUrl = () => (URL.createObjectURL as jest.Mock).mock.results[0].value as string;
 
+  const latestFakeWorker = () => {
+    const results = (SharedWorker as jest.Mock).mock.results;
+    return results[results.length - 1].value;
+  };
+
   it('fetches the worker script with integrity check', async () => {
     // when a SecureSharedWorker is created with a script URL and integrity hash
     await SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
@@ -42,10 +59,11 @@ describe('SecuredSharedWorker', () => {
     expect(await new Response(blob).text()).toBe(WORKER_SCRIPT);
 
     // and the SharedWorker is created with that blob URL
+    expect(SharedWorker).toHaveBeenCalledTimes(1);
     expect(SharedWorker).toHaveBeenCalledWith(blobUrl, { type: 'module' });
   });
 
-  it('connects to an existing shared worker re-using the same blob URL', async () => {
+  it('connects to an existing shared worker when it signals WORKER_ALIVE', async () => {
     // given a first tab fetched the script and spawned the worker from its blob URL
     await SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
     const firstTabBlobUrl = mintedBlobUrl();
@@ -55,12 +73,51 @@ describe('SecuredSharedWorker', () => {
     (SharedWorker as jest.Mock).mockClear();
     (fetch as jest.Mock).mockClear();
     (URL.createObjectURL as jest.Mock).mockClear();
-    await SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
+    const workerPromise = SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
 
-    // then it connects via the SAME blob URL — no fetch, no new blob URL
+    // and the worker signals that it is alive
+    const connectedWorker = latestFakeWorker();
+    connectedWorker.signalAlive();
+
+    // then the existing worker is connected
+    const worker = await workerPromise;
+    expect(worker).toBe(connectedWorker);
+
+    // and it was constructed from the SAME stored blob URL — no fetch, no new blob URL
     expect(fetch).not.toHaveBeenCalled();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(SharedWorker).toHaveBeenCalledTimes(1);
     expect(SharedWorker).toHaveBeenCalledWith(firstTabBlobUrl, { type: 'module' });
+  });
+
+  it('mints a fresh blob URL when connecting to the stored worker fails', async () => {
+    // given a first tab fetched the script and spawned the worker from its blob URL
+    await SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
+    const deadBlobUrl = mintedBlobUrl();
+
+    // and a new tab creates a SecureSharedWorker for the same script
+    (SharedWorker as jest.Mock).mockClear();
+    (fetch as jest.Mock).mockClear();
+    (URL.createObjectURL as jest.Mock).mockClear();
+    const workerPromise = SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
+
+    // but the first tab was closed before, so that the worker died
+    const deadWorker = latestFakeWorker();
+    expect(SharedWorker).toHaveBeenCalledTimes(1);
+    expect(SharedWorker).toHaveBeenCalledWith(deadBlobUrl, { type: 'module' });
+    deadWorker.signalError();
+
+    // then the script is fetched again and a fresh blob URL is minted
+    const worker = await workerPromise;
+    expect(fetch).toHaveBeenCalledWith("https://cdn.example/worker.js", { integrity: "fake-hash-123" });
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    const freshBlobUrl = mintedBlobUrl();
+    expect(freshBlobUrl).not.toBe(deadBlobUrl);
+
+    // and create() hands back the newly connected worker
+    expect(worker).not.toBe(deadWorker);
+    expect(SharedWorker).toHaveBeenCalledWith(freshBlobUrl, { type: 'module' });
+    expect(worker).toBe(latestFakeWorker());
   });
 
   it('does not re-use the blob URL if a different worker script is used', async () => {
