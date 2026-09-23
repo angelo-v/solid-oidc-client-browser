@@ -5,11 +5,14 @@
   const worker: any = {
     port,
     addEventListener: jest.fn(),
-    signalAlive: () => port.addEventListener.mock.calls[0][1]({ data: { type: RefreshMessageTypes.WORKER_ALIVE } }),
+    signalAlive: () => port.addEventListener.mock.calls[0]?.[1]?.({ data: { type: RefreshMessageTypes.WORKER_ALIVE } }),
     signalError: () => worker.addEventListener.mock.calls[0][1]({ type: 'error' }),
   };
   return worker;
 });
+
+const acquireLock = jest.fn((name: string, callback: () => Promise<any>) => callback());
+(global.navigator as any).locks = { request: acquireLock };
 
 import {SecureSharedWorker} from "../../src/web/SecureSharedWorker";
 import {RefreshMessageTypes} from "../../src/web/RefreshMessageTypes";
@@ -22,6 +25,7 @@ describe('SecuredSharedWorker', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    acquireLock.mockClear();
     (SharedWorker as jest.Mock).mockClear();
     (URL.createObjectURL as jest.Mock).mockClear();
     (fetch as jest.Mock).mockClear();
@@ -135,6 +139,21 @@ describe('SecuredSharedWorker', () => {
       .rejects.toThrow('Failed to fetch');
     expect(URL.createObjectURL).not.toHaveBeenCalled();
     expect(SharedWorker).not.toHaveBeenCalled();
+  });
+
+  it('serializes concurrent creates through a single lock per script', async () => {
+    // when two tabs create a SecureSharedWorker concurrently (e.g. session restore at browser start)
+    const firstTab = SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
+    const secondTab = SecureSharedWorker.create("https://cdn.example/worker.js", "fake-hash-123", { type: 'module' });
+    await Promise.all([firstTab, secondTab]);
+
+    // then both worker creations ran inside the same lock
+    // so that the platform serializes both,
+    // and the second tab finds the stored blob URL instead of minting its own worker
+    expect(acquireLock).toHaveBeenCalledTimes(2);
+    const [firstName, secondName] = acquireLock.mock.calls.map(([name]) => name);
+    expect(firstName).toBe('solid-oidc:secure-shared-worker:https://cdn.example/worker.js');
+    expect(secondName).toBe(firstName);
   });
 
   it('does not re-use the blob URL if a different worker script is used', async () => {

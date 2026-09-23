@@ -10,19 +10,21 @@ export class SecureSharedWorker extends SharedWorker {
 
   static async create(scriptURL: string | URL, integrityHash: string, options: WorkerOptions): Promise<SecureSharedWorker> {
     const storageKey = this.getStorageKey(scriptURL);
-    const existingUrl = localStorage.getItem(storageKey);
+    return navigator.locks.request(`solid-oidc:${storageKey}`, async () => {
+      const existingUrl = localStorage.getItem(storageKey);
 
-    if (existingUrl) {
-      const existing = new SecureSharedWorker(existingUrl, options);
-      try {
-        return await this.ensureWorkerAlive(existing);
-      } catch (e) {
-        // this is OK; it just means the stored worker url does not represent a valid worker any more
-        // we continue fetching the script and creating a new worker
+      if (existingUrl) {
+        const existing = new SecureSharedWorker(existingUrl, options);
+        try {
+          return await this.ensureWorkerAlive(existing);
+        } catch (e) {
+          // this is OK; it just means the stored worker url does not represent a valid worker any more
+          // we continue fetching the script and creating a new worker
+        }
       }
-    }
-    const blobUrl = await this.fetchWorkerScript(scriptURL, integrityHash);
-    return new SecureSharedWorker(blobUrl, options);
+      const blobUrl = await this.fetchWorkerScript(scriptURL, integrityHash);
+      return new SecureSharedWorker(blobUrl, options);
+    });
   }
 
   private static getStorageKey(scriptURL: string | URL) {
